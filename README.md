@@ -6,6 +6,11 @@ Dataverse / Dynamics 365 environment.
 These problems are silent. The solution imports cleanly, nothing is logged, and the first
 sign of trouble is an error dialog in a user's face — or a handler that simply never runs.
 
+![Scan results](docs/scan-results.png)
+
+*Example output. Tick the publisher prefixes you want to scan, press Scan, and every handler that
+cannot work is listed with the reason and the fix.*
+
 ## What it checks
 
 | Check | Problem it catches |
@@ -17,10 +22,20 @@ sign of trouble is an error dialog in a user's face — or a handler that simply
 
 ## Scope and noise
 
-Every environment contains hundreds of Microsoft's own forms whose scripts are bundled inside the
-platform. Checking those produces false positives and nothing else, so the tool works on **your own
-publisher prefixes** and leaves Microsoft's components alone. Prefixes are detected automatically and
-you choose which ones to scan.
+The hard part of a check like this is not the check — it is not drowning you in findings you cannot
+act on.
+
+Every environment carries hundreds of Microsoft's own forms whose scripts are bundled inside the
+platform and cannot be resolved from a web resource. Business process flows have their own tables,
+but their forms bind to columns of the table the process runs on, so every one of those columns
+reads as missing. And `new` is the prefix Dataverse hands to the default publisher, so most of what
+carries it was never deliberately built.
+
+So the tool scans **your own publisher prefixes**, detected automatically and yours to tick or untick,
+skips process and relationship tables when checking columns, and leaves `new` unticked to begin with.
+
+On a real environment that took the first run from 107 findings to 10 — the same 10 real problems,
+with the 97 that nobody could act on gone.
 
 ## Results
 
