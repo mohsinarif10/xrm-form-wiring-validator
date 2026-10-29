@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>MohsinArif.XrmToolBox.FormWiringValidator</id>
+    <version>1.0.0</version>
+    <title>Form Wiring Validator</title>
+    <authors>Mohsin Arif</authors>
+    <owners>Mohsin Arif</owners>
+    <projectUrl>https://github.com/mohsinarif10/xrm-form-wiring-validator</projectUrl>
+    <license type="expression">MIT</license>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <summary>Finds broken form script wiring in Dataverse environments.</summary>
+    <description>
+      Finds form script problems that nothing else reports: a handler calling a function the
+      declared library does not define, a library that is missing or empty, a handler using a
+      library the form never loads, and controls bound to columns that no longer exist.
+
+      These failures are silent. The solution imports cleanly, nothing is logged, and the first
+      sign of trouble is an error dialog in a user's face.
+
+      The scan runs against your own publisher prefixes, so Microsoft's own forms - whose scripts
+      are bundled inside the platform and cannot be resolved from a web resource - are left alone.
+      Findings export to CSV.
+    </description>
+    <releaseNotes>First release.</releaseNotes>
+    <copyright>Copyright (c) 2026 Mohsin Arif</copyright>
+    <!-- The XrmToolBox tag is what the Tool Library searches for. Without it the tool is invisible. -->
+    <tags>XrmToolBox Dataverse Dynamics365 PowerPlatform forms javascript webresource validation</tags>
+  </metadata>
+  <files>
+    <file src="..\src\FormWiringValidator\bin\Release\net48\FormWiringValidator.dll" target="lib\net4x\Plugins" />
+    <file src="..\README.md" target="" />
+    <file src="..\LICENSE" target="" />
+  </files>
+</package>
