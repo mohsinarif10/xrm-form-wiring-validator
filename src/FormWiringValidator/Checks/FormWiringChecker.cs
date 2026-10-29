@@ -248,37 +248,36 @@ namespace FormWiringValidator.Checks
         /// Looks for a definition of the function rather than a mention of it, so that a call or a
         /// comment is not taken as proof that the function exists.
         /// </summary>
-        internal static bool IsDefined(string content, string leaf)
+        public static bool IsDefined(string content, string leaf)
         {
             var flat = Regex.Replace(StripComments(content), @"\s+", " ");
+            var name = Regex.Escape(leaf);
 
-            var shapes = new[]
-            {
-                leaf + " : function",
-                leaf + ": function",
-                leaf + " = function",
-                leaf + "= function",
-                leaf + " : async function",
-                leaf + " = async function",
-                "function " + leaf + " (",
-                "function " + leaf + "(",
-                leaf + " : (",
-                leaf + " = (",
-                leaf + " : async (",
-                leaf + " = async ("
-            };
-
-            if (shapes.Any(shape => flat.IndexOf(shape, StringComparison.Ordinal) >= 0))
+            // Assigned to a property or a variable:
+            //   onLoad: function (e)      onLoad = function (e)
+            //   onLoad: async function    onLoad: (e) =>        onLoad: async (e) =>
+            if (Regex.IsMatch(flat, name + @"\s*[:=]\s*(async\s+)?(function\b|\()"))
             {
                 return true;
             }
 
-            // ES6 shorthand, e.g.  onLoad (context) { ... }
+            // Arrow function with a single unbracketed parameter:  onLoad: e => { }
+            if (Regex.IsMatch(flat, name + @"\s*[:=]\s*(async\s+)?[A-Za-z_$][\w$]*\s*=>"))
+            {
+                return true;
+            }
+
+            // Declared:  function onLoad (e)
+            if (Regex.IsMatch(flat, @"\bfunction\s+" + name + @"\s*\("))
+            {
+                return true;
+            }
+
+            // ES6 shorthand method:  onLoad (context) { ... }
             // The trailing brace is what separates a definition from a plain call such as
-            // onLoad(context); - without it, any call would be mistaken for a definition and
+            // onLoad(context); - without it any call would be mistaken for a definition and
             // real problems would be missed.
-            var shorthand = new Regex(Regex.Escape(leaf) + @"\s*\([^)]*\)\s*\{");
-            return shorthand.IsMatch(flat);
+            return Regex.IsMatch(flat, name + @"\s*\([^)]*\)\s*\{");
         }
 
         private static string StripComments(string js)
