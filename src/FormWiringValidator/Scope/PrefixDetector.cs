@@ -36,5 +36,15 @@ namespace FormWiringValidator.Scope
                 .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
+
+        /// <summary>
+        /// Whether a prefix is worth ticking by default. "new" is the prefix Dataverse hands to
+        /// the default publisher, so most of what carries it was never deliberately built and its
+        /// findings are rarely worth anyone's time. It is still offered, just not pre-ticked.
+        /// </summary>
+        public static bool TickByDefault(string prefix)
+        {
+            return !string.Equals(prefix, "new", StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

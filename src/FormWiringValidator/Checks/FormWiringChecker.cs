@@ -40,6 +40,9 @@ namespace FormWiringValidator.Checks
         private readonly Dictionary<string, HashSet<string>> _columns =
             new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
+        private readonly Dictionary<string, bool> _skipColumnCheck =
+            new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
         public int FormsScanned { get; private set; }
 
         public int HandlersChecked { get; private set; }
@@ -196,7 +199,7 @@ namespace FormWiringValidator.Checks
             var ourTable = BelongsToCustomer(table, prefixes);
 
             var columns = GetColumns(table);
-            if (columns == null)
+            if (columns == null || _skipColumnCheck[table])
             {
                 return;
             }
@@ -336,6 +339,7 @@ namespace FormWiringValidator.Checks
             }
 
             HashSet<string> set;
+            var skip = false;
             try
             {
                 var request = new RetrieveEntityRequest
@@ -344,9 +348,19 @@ namespace FormWiringValidator.Checks
                     EntityFilters = EntityFilters.Attributes
                 };
                 var response = (RetrieveEntityResponse)_service.Execute(request);
+                var metadata = response.EntityMetadata;
+
                 set = new HashSet<string>(
-                    response.EntityMetadata.Attributes.Select(a => a.LogicalName),
+                    metadata.Attributes.Select(a => a.LogicalName),
                     StringComparer.OrdinalIgnoreCase);
+
+                // A business process flow has its own table, but its form binds to columns of the
+                // table the process runs on, not to its own. Checking those columns here would
+                // report every one of them as missing, which is wrong and drowns the real
+                // findings. The same goes for the hidden join tables behind many-to-many
+                // relationships.
+                skip = (metadata.IsBPFEntity.HasValue && metadata.IsBPFEntity.Value)
+                    || (metadata.IsIntersect.HasValue && metadata.IsIntersect.Value);
             }
             catch (Exception)
             {
@@ -355,6 +369,7 @@ namespace FormWiringValidator.Checks
             }
 
             _columns[table] = set;
+            _skipColumnCheck[table] = skip;
             return set;
         }
 

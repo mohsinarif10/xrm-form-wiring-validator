@@ -95,7 +95,7 @@ namespace FormWiringValidator
                     _prefixList.Items.Clear();
                     foreach (var prefix in prefixes)
                     {
-                        _prefixList.Items.Add(prefix, true);
+                        _prefixList.Items.Add(prefix, PrefixDetector.TickByDefault(prefix));
                     }
 
                     _scanButton.Enabled = prefixes.Count > 0;
