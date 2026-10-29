@@ -85,7 +85,7 @@ namespace FormWiringValidator.Checks
                 var name = form.GetAttributeValue<string>("name");
 
                 CheckHandlers(doc, table, name, prefixes, findings);
-                CheckColumns(doc, table, name, findings);
+                CheckColumns(doc, table, name, prefixes, findings);
             }
 
             return findings;
@@ -186,8 +186,15 @@ namespace FormWiringValidator.Checks
             }
         }
 
-        private void CheckColumns(XDocument doc, string table, string formName, List<Finding> findings)
+        private void CheckColumns(XDocument doc, string table, string formName,
+            ICollection<string> prefixes, List<Finding> findings)
         {
+            // Microsoft's own forms bind to Microsoft's own columns, and a stale control on one of
+            // them is not something anyone here can act on. Report a missing column only where the
+            // table or the column belongs to the customer, otherwise the handful of findings that
+            // matter are buried under dozens that do not.
+            var ourTable = BelongsToCustomer(table, prefixes);
+
             var columns = GetColumns(table);
             if (columns == null)
             {
@@ -204,6 +211,11 @@ namespace FormWiringValidator.Checks
 
                 var classId = (string)control.Attribute("classid");
                 if (!string.IsNullOrEmpty(classId) && NonFieldControls.Contains(classId))
+                {
+                    continue;
+                }
+
+                if (!ourTable && !BelongsToCustomer(field, prefixes))
                 {
                     continue;
                 }
