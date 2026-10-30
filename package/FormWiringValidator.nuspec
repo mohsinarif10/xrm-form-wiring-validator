@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
   <metadata>
     <id>MohsinArif.XrmToolBox.FormWiringValidator</id>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <title>Form Wiring Validator</title>
     <authors>Mohsin Arif</authors>
     <owners>Mohsin Arif</owners>
@@ -22,14 +22,15 @@
       are bundled inside the platform and cannot be resolved from a web resource - are left alone.
       Findings export to CSV.
     </description>
-    <releaseNotes>First release.</releaseNotes>
+    <readme>README.md</readme>
+    <releaseNotes>Adds two checks: a handler whose function reads the execution context without it being passed, and a library that loads before the one it depends on.</releaseNotes>
     <copyright>Copyright (c) 2026 Mohsin Arif</copyright>
     <!-- The XrmToolBox tag is what the Tool Library searches for. Without it the tool is invisible. -->
     <tags>XrmToolBox Dataverse Dynamics365 PowerPlatform forms javascript webresource validation</tags>
   </metadata>
   <files>
     <file src="..\src\FormWiringValidator\bin\Release\net48\FormWiringValidator.dll" target="lib\net4x\Plugins" />
-    <file src="..\README.md" target="" />
-    <file src="..\LICENSE" target="" />
+    <file src="..\README.md" target="README.md" />
+    <file src="..\LICENSE" target="LICENSE" />
   </files>
 </package>

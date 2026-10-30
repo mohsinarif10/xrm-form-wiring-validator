@@ -5,7 +5,7 @@
     <AssemblyName>FormWiringValidator</AssemblyName>
     <RootNamespace>FormWiringValidator</RootNamespace>
     <LangVersion>latest</LangVersion>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Authors>Mohsin Arif</Authors>
     <Product>Form Wiring Validator</Product>
     <Description>Finds broken form script wiring in Dataverse environments.</Description>

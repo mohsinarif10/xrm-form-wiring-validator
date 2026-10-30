@@ -89,6 +89,7 @@ namespace FormWiringValidator.Checks
 
                 CheckHandlers(doc, table, name, prefixes, findings);
                 CheckColumns(doc, table, name, prefixes, findings);
+                CheckLibraryOrder(doc, table, name, prefixes, findings);
             }
 
             return findings;
@@ -185,6 +186,25 @@ namespace FormWiringValidator.Checks
                         Problem = leaf + " is not defined in " + library,
                         Fix = "Correct the function name on the handler, or add the function to the library"
                     });
+                    continue;
+                }
+
+                var passes = string.Equals((string)handler.Attribute("passExecutionContext"),
+                    "true", StringComparison.OrdinalIgnoreCase);
+
+                if (!passes && NeedsExecutionContext(content, leaf))
+                {
+                    findings.Add(new Finding
+                    {
+                        Severity = Severity.Error,
+                        Table = table,
+                        Form = formName,
+                        Event = eventName,
+                        Handler = function,
+                        Library = library,
+                        Problem = leaf + " uses the execution context, but the handler does not pass it",
+                        Fix = "Tick 'Pass execution context as first parameter' on the handler"
+                    });
                 }
             }
         }
@@ -236,6 +256,84 @@ namespace FormWiringValidator.Checks
                         Problem = "The form binds to a column that no longer exists on " + table,
                         Fix = "Remove the control from the form, or restore the column"
                     });
+                }
+            }
+        }
+
+        /// <summary>
+        /// Libraries load in the order the form lists them, so one that builds on another has to
+        /// come after it. Get that wrong and the form throws on open - which is exactly how this
+        /// tool came to exist.
+        /// </summary>
+        private void CheckLibraryOrder(XDocument doc, string table, string formName,
+            ICollection<string> prefixes, List<Finding> findings)
+        {
+            var libraries = doc.Descendants("Library")
+                .Select(l => (string)l.Attribute("name"))
+                .Where(n => !string.IsNullOrEmpty(n) && BelongsToCustomer(n, prefixes))
+                .ToList();
+
+            if (libraries.Count < 2)
+            {
+                return;
+            }
+
+            var defines = new List<HashSet<string>>();
+            var uses = new List<HashSet<string>>();
+
+            foreach (var name in libraries)
+            {
+                var content = GetLibrary(name);
+                if (content == null)
+                {
+                    defines.Add(new HashSet<string>());
+                    uses.Add(new HashSet<string>());
+                    continue;
+                }
+
+                var flat = Regex.Replace(StripComments(content), @"\s+", " ");
+
+                // Savills.entities = { ... }
+                var declared = new HashSet<string>(
+                    Regex.Matches(flat, @"([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*=\s*\{")
+                        .Cast<Match>().Select(m => m.Groups[1].Value),
+                    StringComparer.Ordinal);
+
+                // Savills.entities.Campaign ...
+                var referenced = new HashSet<string>(
+                    Regex.Matches(flat, @"([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\.")
+                        .Cast<Match>().Select(m => m.Groups[1].Value),
+                    StringComparer.Ordinal);
+
+                referenced.ExceptWith(declared);
+                defines.Add(declared);
+                uses.Add(referenced);
+            }
+
+            for (var i = 0; i < libraries.Count; i++)
+            {
+                foreach (var symbol in uses[i])
+                {
+                    for (var j = i + 1; j < libraries.Count; j++)
+                    {
+                        if (!defines[j].Contains(symbol))
+                        {
+                            continue;
+                        }
+
+                        findings.Add(new Finding
+                        {
+                            Severity = Severity.Error,
+                            Table = table,
+                            Form = formName,
+                            Event = "(libraries)",
+                            Handler = symbol,
+                            Library = libraries[i],
+                            Problem = libraries[i] + " uses " + symbol + ", which " + libraries[j] + " defines - but that loads later",
+                            Fix = "Move " + libraries[j] + " above " + libraries[i] + " in the form's libraries"
+                        });
+                        break;
+                    }
                 }
             }
         }
@@ -293,6 +391,116 @@ namespace FormWiringValidator.Checks
             // onLoad(context); - without it any call would be mistaken for a definition and
             // real problems would be missed.
             return Regex.IsMatch(flat, name + @"\s*\([^)]*\)\s*\{");
+        }
+
+        /// <summary>
+        /// True when the function's first parameter is used as an execution context.
+        ///
+        /// This is the quietest failure of the lot. The handler runs, the first argument is
+        /// undefined, and the script dies on the first line with nothing written anywhere a
+        /// maker would look.
+        ///
+        /// Only the function's own body is read, so a different function using the same
+        /// parameter name cannot make this report something that is actually fine.
+        /// </summary>
+        public static bool NeedsExecutionContext(string content, string leaf)
+        {
+            var flat = Regex.Replace(StripComments(content), @"\s+", " ");
+
+            var open = ParameterListStart(flat, leaf);
+            if (open < 0)
+            {
+                return false;
+            }
+
+            var close = flat.IndexOf(')', open);
+            if (close < 0)
+            {
+                return false;
+            }
+
+            var parameters = flat.Substring(open + 1, close - open - 1)
+                .Split(',')
+                .Select(p => p.Trim())
+                .Where(p => p.Length > 0)
+                .ToList();
+
+            if (parameters.Count == 0)
+            {
+                return false;
+            }
+
+            var body = BodyAfter(flat, close);
+            if (body == null)
+            {
+                return false;
+            }
+
+            var first = parameters[0];
+            return body.IndexOf(first + ".getFormContext(", StringComparison.Ordinal) >= 0
+                || body.IndexOf(first + ".getEventSource(", StringComparison.Ordinal) >= 0
+                || body.IndexOf(first + ".getEventArgs(", StringComparison.Ordinal) >= 0
+                || body.IndexOf(first + ".getDepth(", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>Index of the "(" that opens the function's parameter list.</summary>
+        private static int ParameterListStart(string flat, string leaf)
+        {
+            var name = Regex.Escape(leaf);
+
+            var assigned = Regex.Match(flat, name + @"\s*[:=]\s*(async\s+)?function\b");
+            if (assigned.Success)
+            {
+                return flat.IndexOf('(', assigned.Index + assigned.Length);
+            }
+
+            var declared = Regex.Match(flat, @"\bfunction\s+" + name + @"\s*\(");
+            if (declared.Success)
+            {
+                return flat.IndexOf('(', declared.Index);
+            }
+
+            var arrow = Regex.Match(flat, name + @"\s*[:=]\s*(async\s+)?\(");
+            if (arrow.Success)
+            {
+                return flat.IndexOf('(', arrow.Index + leaf.Length);
+            }
+
+            var shorthand = Regex.Match(flat, name + @"\s*\([^)]*\)\s*\{");
+            if (shorthand.Success)
+            {
+                return flat.IndexOf('(', shorthand.Index + leaf.Length);
+            }
+
+            return -1;
+        }
+
+        /// <summary>The braced block that follows, found by matching braces.</summary>
+        private static string BodyAfter(string flat, int from)
+        {
+            var open = flat.IndexOf('{', from);
+            if (open < 0)
+            {
+                return null;
+            }
+
+            var depth = 0;
+            for (var i = open; i < flat.Length; i++)
+            {
+                if (flat[i] == '{')
+                {
+                    depth++;
+                }
+                else if (flat[i] == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return flat.Substring(open, i - open + 1);
+                    }
+                }
+            }
+            return null;
         }
 
         private static string StripComments(string js)

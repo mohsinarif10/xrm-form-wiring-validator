@@ -18,7 +18,13 @@ cannot work is listed with the reason and the fix.*
 | Function exists | A form calls `Namespace.doThing`, but the declared library does not define `doThing` |
 | Library exists | A handler points at a web resource that is missing or empty |
 | Library declared | A handler uses a library that is not in the form's library list |
+| Execution context | The function reads the execution context, but the handler does not pass it — so the first argument is `undefined` and the script dies on its first line |
+| Library order | A library uses something another library defines, but that one loads after it |
 | Column exists | A control is bound to a column that no longer exists on the table |
+
+Each check reads only what it needs to be sure. The execution context check, for instance, reads
+that function's own body rather than searching the whole file, so another function using the same
+parameter name cannot turn a working handler into a finding.
 
 ## Scope and noise
 
