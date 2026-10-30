@@ -480,26 +480,56 @@ namespace FormWiringValidator.Checks
             return -1;
         }
 
+        // Words that are followed by "( ... ) {" but are not a method definition.
+        private static readonly HashSet<string> ControlWords = new HashSet<string>(
+            new[] { "if", "for", "while", "switch", "catch", "function", "do", "else", "with" },
+            StringComparer.Ordinal);
+
         /// <summary>
         /// Blanks out every function body, leaving only what executes while the file is loading.
+        ///
+        /// Two passes are needed. The first catches the classic forms, which announce themselves
+        /// with "function" or "=>". The second catches ES6 shorthand methods - onLoad(context) { }
+        /// - which carry no keyword at all, and whose bodies would otherwise be read as load-time
+        /// code and produce load order findings that are not real.
         /// </summary>
         public static string WithoutFunctionBodies(string js)
+        {
+            var pass = BlankBodies(js, (text, i) =>
+                (i + 8 <= text.Length && string.CompareOrdinal(text, i, "function", 0, 8) == 0)
+                || (i + 2 <= text.Length && string.CompareOrdinal(text, i, "=>", 0, 2) == 0)
+                    ? text.IndexOf('{', i)
+                    : -1);
+
+            return BlankBodies(pass, (text, i) =>
+            {
+                if (i > 0 && (char.IsLetterOrDigit(text[i - 1]) || text[i - 1] == '_'
+                              || text[i - 1] == '$' || text[i - 1] == '.'))
+                {
+                    return -1;
+                }
+
+                var m = Regex.Match(text.Substring(i, Math.Min(200, text.Length - i)),
+                    @"^([A-Za-z_$][\w$]*)\s*\([^()]*\)\s*\{");
+                if (!m.Success || ControlWords.Contains(m.Groups[1].Value))
+                {
+                    return -1;
+                }
+
+                return i + m.Length - 1;
+            });
+        }
+
+        private static string BlankBodies(string js, Func<string, int, int> openingBraceAt)
         {
             var chars = js.ToCharArray();
 
             for (var i = 0; i < js.Length; i++)
             {
-                var starts = (i + 8 <= js.Length && string.CompareOrdinal(js, i, "function", 0, 8) == 0)
-                    || (i + 2 <= js.Length && string.CompareOrdinal(js, i, "=>", 0, 2) == 0);
-                if (!starts)
+                var open = openingBraceAt(js, i);
+                if (open < 0 || open >= js.Length || js[open] != '{')
                 {
                     continue;
-                }
-
-                var open = js.IndexOf('{', i);
-                if (open < 0)
-                {
-                    break;
                 }
 
                 var depth = 0;
