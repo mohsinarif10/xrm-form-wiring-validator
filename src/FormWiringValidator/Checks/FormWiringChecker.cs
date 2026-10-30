@@ -299,9 +299,14 @@ namespace FormWiringValidator.Checks
                         .Cast<Match>().Select(m => m.Groups[1].Value),
                     StringComparer.Ordinal);
 
-                // Savills.entities.Campaign ...
+                // Only what runs as the file loads can be hurt by the order. Anything inside a
+                // function runs later, by which time every library is in memory - so counting
+                // those would report load order problems that do not exist. In one real
+                // environment that was the difference between nine findings and none.
+                var atLoad = WithoutFunctionBodies(flat);
+
                 var referenced = new HashSet<string>(
-                    Regex.Matches(flat, @"([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\.")
+                    Regex.Matches(atLoad, @"([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\.")
                         .Cast<Match>().Select(m => m.Groups[1].Value),
                     StringComparer.Ordinal);
 
@@ -473,6 +478,54 @@ namespace FormWiringValidator.Checks
             }
 
             return -1;
+        }
+
+        /// <summary>
+        /// Blanks out every function body, leaving only what executes while the file is loading.
+        /// </summary>
+        public static string WithoutFunctionBodies(string js)
+        {
+            var chars = js.ToCharArray();
+
+            for (var i = 0; i < js.Length; i++)
+            {
+                var starts = (i + 8 <= js.Length && string.CompareOrdinal(js, i, "function", 0, 8) == 0)
+                    || (i + 2 <= js.Length && string.CompareOrdinal(js, i, "=>", 0, 2) == 0);
+                if (!starts)
+                {
+                    continue;
+                }
+
+                var open = js.IndexOf('{', i);
+                if (open < 0)
+                {
+                    break;
+                }
+
+                var depth = 0;
+                for (var k = open; k < js.Length; k++)
+                {
+                    if (js[k] == '{')
+                    {
+                        depth++;
+                    }
+                    else if (js[k] == '}')
+                    {
+                        depth--;
+                        if (depth == 0)
+                        {
+                            for (var b = open; b <= k; b++)
+                            {
+                                chars[b] = ' ';
+                            }
+                            i = k;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return new string(chars);
         }
 
         /// <summary>The braced block that follows, found by matching braces.</summary>
